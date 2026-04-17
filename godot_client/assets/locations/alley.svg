@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="200" viewBox="0 0 480 200">
+  <defs>
+    <linearGradient id="sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#050810"/>
+      <stop offset="100%" stop-color="#0a0f1a"/>
+    </linearGradient>
+    <radialGradient id="lamp" cx="50%" cy="30%" r="50%">
+      <stop offset="0%" stop-color="#c8a040" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#050810" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="200" fill="url(#sky)"/>
+  <!-- Стены домов -->
+  <rect x="0" y="0" width="140" height="200" fill="#0f0e0c"/>
+  <rect x="340" y="0" width="140" height="200" fill="#0f0e0c"/>
+  <!-- Переулок -->
+  <rect x="140" y="0" width="200" height="200" fill="#080808"/>
+  <!-- Перспектива — сужение -->
+  <polygon points="140,200 200,0 280,0 340,200" fill="#0a0a0a"/>
+  <!-- Камни мостовой -->
+  <rect x="140" y="160" width="200" height="40" fill="#111010"/>
+  <line x1="160" y1="160" x2="155" y2="200" stroke="#1a1818" stroke-width="1"/>
+  <line x1="200" y1="160" x2="195" y2="200" stroke="#1a1818" stroke-width="1"/>
+  <line x1="240" y1="160" x2="240" y2="200" stroke="#1a1818" stroke-width="1"/>
+  <line x1="280" y1="160" x2="285" y2="200" stroke="#1a1818" stroke-width="1"/>
+  <line x1="320" y1="160" x2="325" y2="200" stroke="#1a1818" stroke-width="1"/>
+  <!-- Окна в стенах -->
+  <rect x="20" y="40" width="40" height="30" fill="#0a0f18" rx="2"/>
+  <rect x="80" y="60" width="35" height="25" fill="#0a0f18" rx="2"/>
+  <rect x="390" y="35" width="40" height="30" fill="#0a0f18" rx="2"/>
+  <rect x="440" y="65" width="30" height="25" fill="#0a0f18" rx="2"/>
+  <!-- Фонарь -->
+  <line x1="240" y1="0" x2="240" y2="50" stroke="#3a3020" stroke-width="3"/>
+  <rect x="228" y="45" width="24" height="30" fill="#2a2010" rx="3"/>
+  <rect x="232" y="49" width="16" height="22" fill="#c8a040" opacity="0.6" rx="2"/>
+  <ellipse cx="240" cy="75" rx="60" ry="30" fill="url(#lamp)"/>
+  <!-- Тень в углу -->
+  <ellipse cx="155" cy="185" rx="20" ry="10" fill="#050505"/>
+  <!-- Кошка -->
+  <ellipse cx="310" cy="175" rx="8" ry="5" fill="#1a1818"/>
+  <ellipse cx="316" cy="170" rx="5" ry="5" fill="#1a1818"/>
+  <line x1="318" y1="168" x2="322" y2="163" stroke="#1a1818" stroke-width="2"/>
+  <line x1="316" y1="167" x2="320" y2="162" stroke="#1a1818" stroke-width="2"/>
+  <!-- Луна -->
+  <circle cx="240" cy="20" r="12" fill="#c8c0a0" opacity="0.6"/>
+  <circle cx="245" cy="17" r="10" fill="#080808"/>
+  <text x="240" y="195" font-family="serif" font-size="12" fill="#5a5040" text-anchor="middle" opacity="0.7">Тёмный переулок</text>
+</svg>

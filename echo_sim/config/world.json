@@ -1,0 +1,259 @@
+{
+  "epoch": "medieval",
+  "narrative_tone": "adventure",
+  "llm_model": "gemma2:9b",
+  "context_size": 10,
+  "server_port": 8080,
+  "world_tick_interval": "1 hour",
+  "skill_growth_rate": 1.0,
+  "locations": [
+    {
+      "id": "tavern",
+      "name": "Таверна «Золотой Кубок»",
+      "atmosphere": "Тепло потрескивающего очага, запах эля и жареного мяса. Шумные посетители, тихие разговоры в углах.",
+      "adjacent_location_ids": ["market", "alley", "stable"]
+    },
+    {
+      "id": "market",
+      "name": "Городской рынок",
+      "atmosphere": "Суетливые торговцы, крики зазывал, запах специй и свежего хлеба. Толпа горожан.",
+      "adjacent_location_ids": ["tavern", "castle_gate", "temple", "alley"]
+    },
+    {
+      "id": "castle_gate",
+      "name": "Ворота замка",
+      "atmosphere": "Мрачные каменные стены, стражники в доспехах. Холодный ветер с севера.",
+      "adjacent_location_ids": ["market", "castle_yard"]
+    },
+    {
+      "id": "castle_yard",
+      "name": "Двор замка",
+      "atmosphere": "Тренировочные манекены, звон оружия. Стражники отрабатывают удары. Запах конюшни и кожи.",
+      "adjacent_location_ids": ["castle_gate", "armory"]
+    },
+    {
+      "id": "armory",
+      "name": "Оружейная",
+      "atmosphere": "Стены увешаны клинками и доспехами. Кузнец Торвальд чинит кольчугу у наковальни.",
+      "adjacent_location_ids": ["castle_yard"]
+    },
+    {
+      "id": "alley",
+      "name": "Тёмный переулок",
+      "atmosphere": "Узкие улочки, тени и шёпот. Место, где лучше не задерживаться в одиночку.",
+      "adjacent_location_ids": ["tavern", "market", "thieves_den"]
+    },
+    {
+      "id": "thieves_den",
+      "name": "Логово воров",
+      "atmosphere": "Низкий потолок, дым свечей. Подозрительные личности режутся в кости. Здесь знают всё о тёмных делах города.",
+      "adjacent_location_ids": ["alley"]
+    },
+    {
+      "id": "temple",
+      "name": "Храм Света",
+      "atmosphere": "Высокие своды, запах ладана. Монахи шепчут молитвы. Здесь можно исцелиться за монеты.",
+      "adjacent_location_ids": ["market", "cemetery"]
+    },
+    {
+      "id": "cemetery",
+      "name": "Старое кладбище",
+      "atmosphere": "Покосившиеся надгробия, туман стелется по земле. Ночью здесь неспокойно.",
+      "adjacent_location_ids": ["temple", "catacombs"]
+    },
+    {
+      "id": "catacombs",
+      "name": "Катакомбы",
+      "atmosphere": "Кромешная тьма, запах сырости и тлена. Эхо шагов теряется в лабиринте коридоров. Опасно.",
+      "adjacent_location_ids": ["cemetery"]
+    },
+    {
+      "id": "stable",
+      "name": "Конюшня",
+      "atmosphere": "Запах сена и лошадей. Конюх Петер чистит гнедого жеребца. Тихое место для разговоров.",
+      "adjacent_location_ids": ["tavern", "market"]
+    }
+  ],
+  "player_start": {
+    "name": "Странник",
+    "health": 100,
+    "location_id": "tavern",
+    "skills": {
+      "меч": 15,
+      "скрытность": 8,
+      "красноречие": 12,
+      "выживание": 10,
+      "торговля": 5,
+      "магия": 0
+    },
+    "inventory": ["короткий меч", "кожаная броня", "кошель с монетами (50)", "дорожный паёк"]
+  },
+  "npcs": [
+    {
+      "id": "innkeeper",
+      "name": "Бруно Трактирщик",
+      "location_id": "tavern",
+      "goals": ["зарабатывать деньги", "поддерживать порядок в таверне", "собирать слухи", "выплатить долг Крысе"],
+      "memory": [],
+      "player_actions_memory": [],
+      "schedule": [
+        {"time_range": [360, 1200], "location_id": "tavern"},
+        {"time_range": [1200, 1260], "location_id": "market"},
+        {"time_range": [1260, 1440], "location_id": "tavern"}
+      ],
+      "status": "alive"
+    },
+    {
+      "id": "guard_captain",
+      "name": "Капитан Рейнхард",
+      "location_id": "castle_gate",
+      "goals": ["охранять замок", "найти пропавшие налоги", "поймать главаря воров"],
+      "memory": [],
+      "player_actions_memory": [],
+      "schedule": [
+        {"time_range": [0, 480], "location_id": "castle_gate"},
+        {"time_range": [480, 540], "location_id": "market"},
+        {"time_range": [540, 1200], "location_id": "castle_gate"},
+        {"time_range": [1200, 1260], "location_id": "castle_yard"},
+        {"time_range": [1260, 1440], "location_id": "castle_gate"}
+      ],
+      "status": "alive"
+    },
+    {
+      "id": "merchant",
+      "name": "Мирра Торговка",
+      "location_id": "market",
+      "goals": ["продать товары", "узнать о новых торговых путях", "избегать стражи"],
+      "memory": [],
+      "player_actions_memory": [],
+      "schedule": [
+        {"time_range": [420, 1320], "location_id": "market"},
+        {"time_range": [1320, 1440], "location_id": "tavern"}
+      ],
+      "status": "alive"
+    },
+    {
+      "id": "blacksmith",
+      "name": "Торвальд Кузнец",
+      "location_id": "armory",
+      "goals": ["ковать лучшее оружие в городе", "найти редкую руду", "обучить достойного ученика"],
+      "memory": [],
+      "player_actions_memory": [],
+      "schedule": [
+        {"time_range": [300, 1200], "location_id": "armory"},
+        {"time_range": [1200, 1320], "location_id": "market"},
+        {"time_range": [1320, 1440], "location_id": "tavern"}
+      ],
+      "status": "alive"
+    },
+    {
+      "id": "thief_boss",
+      "name": "Крыса",
+      "location_id": "thieves_den",
+      "goals": ["контролировать преступность города", "получить долг с Бруно", "избегать стражи"],
+      "memory": [],
+      "player_actions_memory": [],
+      "schedule": [
+        {"time_range": [0, 600], "location_id": "thieves_den"},
+        {"time_range": [600, 720], "location_id": "alley"},
+        {"time_range": [720, 1440], "location_id": "thieves_den"}
+      ],
+      "status": "alive"
+    },
+    {
+      "id": "priest",
+      "name": "Брат Адриан",
+      "location_id": "temple",
+      "goals": ["исцелять страждущих", "раскрыть тайну катакомб", "собрать пожертвования"],
+      "memory": [],
+      "player_actions_memory": [],
+      "schedule": [
+        {"time_range": [360, 1320], "location_id": "temple"},
+        {"time_range": [1320, 1380], "location_id": "cemetery"},
+        {"time_range": [1380, 1440], "location_id": "temple"}
+      ],
+      "status": "alive"
+    },
+    {
+      "id": "stable_boy",
+      "name": "Петер Конюх",
+      "location_id": "stable",
+      "goals": ["ухаживать за лошадьми", "накопить денег и уехать из города", "не попасться ворам"],
+      "memory": ["видел как ночью кто-то тащил мешки через переулок"],
+      "player_actions_memory": [],
+      "schedule": [
+        {"time_range": [300, 1380], "location_id": "stable"},
+        {"time_range": [1380, 1440], "location_id": "tavern"}
+      ],
+      "status": "alive"
+    }
+  ],
+  "shop": {
+    "merchant": {
+      "name": "Лавка Мирры",
+      "items": [
+        {"id": "health_potion", "name": "зелье лечения", "price": 15, "effect": {"health": 30}},
+        {"id": "rope", "name": "верёвка", "price": 5},
+        {"id": "torch", "name": "факел", "price": 3},
+        {"id": "lockpick", "name": "отмычка", "price": 20},
+        {"id": "map", "name": "карта города", "price": 10},
+        {"id": "poison", "name": "яд", "price": 35}
+      ]
+    },
+    "blacksmith": {
+      "name": "Кузница Торвальда",
+      "items": [
+        {"id": "sword", "name": "длинный меч", "price": 80, "skill_req": {"меч": 20}},
+        {"id": "dagger", "name": "кинжал", "price": 25},
+        {"id": "chainmail", "name": "кольчуга", "price": 120},
+        {"id": "shield", "name": "щит", "price": 45},
+        {"id": "arrow_bundle", "name": "колчан стрел", "price": 15}
+      ]
+    },
+    "priest": {
+      "name": "Исцеление в храме",
+      "items": [
+        {"id": "heal_small", "name": "малое исцеление", "price": 10, "effect": {"health": 25}},
+        {"id": "heal_full", "name": "полное исцеление", "price": 40, "effect": {"health": 999}},
+        {"id": "blessing", "name": "благословение", "price": 20, "effect": {"skill_boost": "меч", "delta": 2}}
+      ]
+    }
+  },
+  "quests": [
+    {
+      "id": "missing_taxes",
+      "title": "Пропавшие налоги",
+      "description": "Капитан Рейнхард ищет того, кто поможет найти пропавшую казну. Говорят, деньги видели в тёмном переулке.",
+      "giver_npc_id": "guard_captain",
+      "status": "available"
+    },
+    {
+      "id": "brunos_debt",
+      "title": "Долг Бруно",
+      "description": "Трактирщик Бруно должен деньги опасным людям. Он просит помочь разобраться с этим тихо.",
+      "giver_npc_id": "innkeeper",
+      "status": "available"
+    },
+    {
+      "id": "rare_ore",
+      "title": "Редкая руда",
+      "description": "Кузнец Торвальд слышал, что в катакомбах есть залежи редкой руды. Нужен смельчак, чтобы добыть её.",
+      "giver_npc_id": "blacksmith",
+      "status": "available"
+    },
+    {
+      "id": "catacomb_mystery",
+      "title": "Тайна катакомб",
+      "description": "Брат Адриан уверен, что в катакомбах происходит нечто нечестивое. Он просит расследовать.",
+      "giver_npc_id": "priest",
+      "status": "available"
+    },
+    {
+      "id": "thieves_route",
+      "title": "Путь воров",
+      "description": "Петер видел подозрительных людей ночью. Если выследить их — можно узнать, куда делись налоги.",
+      "giver_npc_id": "stable_boy",
+      "status": "available"
+    }
+  ]
+}

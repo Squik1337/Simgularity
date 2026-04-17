@@ -1,0 +1,227 @@
+/* Echo-Sim TUI — стили */
+
+Screen {
+    layers: base overlay;
+}
+
+/* ── Базовая раскладка ── */
+#main-layout {
+    height: 1fr;
+    layout: horizontal;
+}
+
+#left-panel {
+    width: 1fr;
+    height: 100%;
+    layout: vertical;
+}
+
+#narrative {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-size: 1 1;
+    scrollbar-gutter: stable;
+}
+
+#status-bar {
+    height: 1;
+    padding: 0 1;
+    text-align: center;
+}
+
+#command-input {
+    height: 3;
+    margin-top: 0;
+}
+
+#status-panel {
+    width: 32;
+    height: 100%;
+    padding: 1 1;
+    overflow-y: auto;
+    scrollbar-size: 1 1;
+}
+
+Footer {
+    height: 1;
+}
+
+/* ══════════════════════════════════════════
+   ТЕМА: medieval
+   Пергамент, золото, тёмный камень
+══════════════════════════════════════════ */
+.theme-medieval {
+    background: #0f0e0a;
+    color: #c8bfa0;
+}
+.theme-medieval #narrative {
+    background: #0d0c09;
+    border: tall #3a3020;
+    color: #c8bfa0;
+    scrollbar-color: #5a4a20 #1a1810;
+}
+.theme-medieval #status-bar {
+    background: #1a1810;
+    color: #7a6a40;
+}
+.theme-medieval #command-input {
+    background: #0f0e0a;
+    border: tall #c8a020;
+    color: #f0d060;
+}
+.theme-medieval #command-input:focus {
+    border: tall #f0d060;
+}
+.theme-medieval #status-panel {
+    background: #0d0c09;
+    border: tall #3a3020;
+    color: #c8bfa0;
+}
+.theme-medieval Footer {
+    background: #1a1810;
+    color: #7a6a40;
+}
+
+/* ══════════════════════════════════════════
+   ТЕМА: post_apocalyptic
+   Ржавчина, выжженная земля, радиация
+══════════════════════════════════════════ */
+.theme-post_apocalyptic {
+    background: #0a0a06;
+    color: #9a8060;
+}
+.theme-post_apocalyptic #narrative {
+    background: #080806;
+    border: tall #2a2010;
+    color: #9a8060;
+    scrollbar-color: #4a3820 #100e08;
+}
+.theme-post_apocalyptic #status-bar {
+    background: #100e08;
+    color: #5a4830;
+}
+.theme-post_apocalyptic #command-input {
+    background: #0a0a06;
+    border: tall #8b5a20;
+    color: #cd8040;
+}
+.theme-post_apocalyptic #command-input:focus {
+    border: tall #cd8040;
+}
+.theme-post_apocalyptic #status-panel {
+    background: #080806;
+    border: tall #2a2010;
+    color: #9a8060;
+}
+.theme-post_apocalyptic Footer {
+    background: #100e08;
+    color: #5a4830;
+}
+
+/* ══════════════════════════════════════════
+   ТЕМА: cyberpunk
+   Неон, тьма, матрица
+══════════════════════════════════════════ */
+.theme-cyberpunk {
+    background: #050510;
+    color: #8080cc;
+}
+.theme-cyberpunk #narrative {
+    background: #040410;
+    border: tall #1a0a3a;
+    color: #9090dd;
+    scrollbar-color: #4a0a8a #0a0820;
+}
+.theme-cyberpunk #status-bar {
+    background: #0a0820;
+    color: #4040aa;
+}
+.theme-cyberpunk #command-input {
+    background: #050510;
+    border: tall #008888;
+    color: #00dddd;
+}
+.theme-cyberpunk #command-input:focus {
+    border: tall #00ffff;
+}
+.theme-cyberpunk #status-panel {
+    background: #040410;
+    border: tall #1a0a3a;
+    color: #9090dd;
+}
+.theme-cyberpunk Footer {
+    background: #0a0820;
+    color: #4040aa;
+}
+
+/* ══════════════════════════════════════════
+   ТЕМА: fantasy
+   Лес, магия, золото
+══════════════════════════════════════════ */
+.theme-fantasy {
+    background: #060e06;
+    color: #80c080;
+}
+.theme-fantasy #narrative {
+    background: #050c05;
+    border: tall #1a3010;
+    color: #80c080;
+    scrollbar-color: #2a6020 #0a1808;
+}
+.theme-fantasy #status-bar {
+    background: #0a1808;
+    color: #406030;
+}
+.theme-fantasy #command-input {
+    background: #060e06;
+    border: tall #c0a000;
+    color: #f0d000;
+}
+.theme-fantasy #command-input:focus {
+    border: tall #ffd700;
+}
+.theme-fantasy #status-panel {
+    background: #050c05;
+    border: tall #1a3010;
+    color: #80c080;
+}
+.theme-fantasy Footer {
+    background: #0a1808;
+    color: #406030;
+}
+
+/* ══════════════════════════════════════════
+   ТЕМА: modern
+   Минимализм, серый, синий
+══════════════════════════════════════════ */
+.theme-modern {
+    background: #0e0e0e;
+    color: #c0c0c0;
+}
+.theme-modern #narrative {
+    background: #0a0a0a;
+    border: tall #252525;
+    color: #c0c0c0;
+    scrollbar-color: #404040 #181818;
+}
+.theme-modern #status-bar {
+    background: #181818;
+    color: #505050;
+}
+.theme-modern #command-input {
+    background: #0e0e0e;
+    border: tall #2a5080;
+    color: #80b0e0;
+}
+.theme-modern #command-input:focus {
+    border: tall #4080c0;
+}
+.theme-modern #status-panel {
+    background: #0a0a0a;
+    border: tall #252525;
+    color: #c0c0c0;
+}
+.theme-modern Footer {
+    background: #181818;
+    color: #505050;
+}
