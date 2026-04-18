@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Game Master -- interaction with ollama LLM."""
+"""Game Master -- interaction with LLM providers."""
 from __future__ import annotations
 import json
 import re
-import urllib.request
-import urllib.error
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from echo_sim.core.gm_prompt import build_main_prompt, build_ambient_prompt
+from echo_sim.core.llm_provider import create_llm_provider, LLMProvider
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
 TIMEOUT_SECONDS = 120
 
 
@@ -34,11 +32,12 @@ class GameMaster:
         self.epoch: str = config.get("epoch", "medieval")
         self.session_context: list[dict] = []
         self.stream_callback: Optional[Callable[[str], None]] = None
+        self.llm_provider: LLMProvider = create_llm_provider(config, self.stream_callback)
 
     def generate(self, world_ctx: dict, command: str) -> GMResponse:
         system_prompt = self._build_system_prompt(world_ctx)
         messages = self._build_messages(command)
-        raw = self._call_ollama(system_prompt, messages)
+        raw = self.llm_provider.generate(system_prompt, messages)
         response = self._parse_response(raw)
         self.session_context.append({"role": "user", "content": command})
         self.session_context.append({"role": "assistant", "content": response.narrative})
@@ -90,53 +89,6 @@ class GameMaster:
         messages = list(recent)
         messages.append({"role": "user", "content": command})
         return messages
-
-    def _call_ollama(self, system_prompt: str, messages: list[dict]) -> str:
-        full_prompt = system_prompt + "\n\n"
-        for msg in messages:
-            role = "Igrok" if msg["role"] == "user" else "GM"
-            full_prompt += f"{role}: {msg['content']}\n"
-
-        payload = json.dumps({
-            "model": self.model,
-            "prompt": full_prompt,
-            "stream": True,
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            OLLAMA_URL,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            result = []
-            with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-                for line in resp:
-                    if not line.strip():
-                        continue
-                    try:
-                        chunk = json.loads(line.decode("utf-8"))
-                        token = chunk.get("response", "")
-                        if token:
-                            result.append(token)
-                            if self.stream_callback:
-                                self.stream_callback(token)
-                            else:
-                                print(token, end="", flush=True)
-                        if chunk.get("done"):
-                            break
-                    except json.JSONDecodeError:
-                        continue
-            if not self.stream_callback:
-                print()
-            return "".join(result)
-        except urllib.error.URLError:
-            return "GM nedostupen: ollama ne zapushchen"
-        except TimeoutError:
-            return "GM nedostupen: prevysheno vremya ozhidaniya"
-        except Exception as e:
-            return f"GM nedostupen: {e}"
 
     def _parse_response(self, raw: str) -> GMResponse:
         # Убираем markdown и лишние пробелы
@@ -197,5 +149,5 @@ class GameMaster:
         intensity = getattr(trigger, "intensity", "subtle")
 
         prompt = build_ambient_prompt(self.epoch, loc, time_str, npc_names, recent_str, kind, intensity)
-        raw = self._call_ollama(prompt, [])
+        raw = self.llm_provider.generate(prompt, [])
         return self._parse_response(raw)

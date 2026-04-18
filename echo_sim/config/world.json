@@ -1,6 +1,7 @@
 {
   "epoch": "medieval",
   "narrative_tone": "adventure",
+  "llm_provider": "ollama",
   "llm_model": "gemma2:9b",
   "context_size": 10,
   "server_port": 8080,
