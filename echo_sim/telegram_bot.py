@@ -6,8 +6,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 # --- КОНФИГУРАЦИЯ ---
-# ВСТАВЬТЕ СЮДА ВАШ ТОКЕН ОТ @BotFather
-TOKEN = "ВАШ_ТОКЕН_ОТ_BOTFATHER" 
+# Токен бота берётся из переменной окружения TELEGRAM_BOT_TOKEN (@BotFather).
+# Никогда не храните токен прямо в коде.
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config', 'world.json')
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -87,7 +88,7 @@ def get_shop_for_location(location_id):
 
 # --- LLM ИНТЕГРАЦИЯ (GROQ) ---
 def ask_llm(prompt, system_context=""):
-    api_key = world_data.get('api_key')
+    api_key = os.environ.get('ECHOSIM_API_KEY') or world_data.get('api_key')
     model = world_data.get('llm_model', 'llama3-70b-8192')
     
     if not api_key:
@@ -361,8 +362,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- ЗАПУСК ---
 def main():
-    if TOKEN == "ВАШ_ТОКЕН_ОТ_BOTFATHER":
-        print("❌ ОШИБКА: Не забудьте вставить токен бота в переменную TOKEN!")
+    if not TOKEN:
+        print("❌ ОШИБКА: задайте токен бота в переменной окружения TELEGRAM_BOT_TOKEN!")
         return
 
     app = Application.builder().token(TOKEN).build()

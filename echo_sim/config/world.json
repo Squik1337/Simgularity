@@ -3,7 +3,7 @@
   "narrative_tone": "adventure",
   "llm_provider": "kluster",
   "llm_model": "gemma2-9b-it",
-  "api_key": "9ba7398f-80ba-40a2-9dd4-da304de49be5",
+  "api_key": "",
   "context_size": 10,
   "server_port": 8080,
   "world_tick_interval": "1 hour",

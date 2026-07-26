@@ -1,5 +1,6 @@
 """Загрузка и валидация конфигурации мира."""
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -31,5 +32,11 @@ def load_config(path: str = "echo_sim/config/world.json") -> dict:
     config.setdefault("skill_growth_rate", 1.0)
     config.setdefault("npcs", [])
     config.setdefault("quests", [])
+
+    # Секреты берутся из окружения и имеют приоритет над файлом конфигурации.
+    # Это позволяет не хранить API-ключи в world.json (и в системе контроля версий).
+    env_api_key = os.environ.get("ECHOSIM_API_KEY")
+    if env_api_key:
+        config["api_key"] = env_api_key
 
     return config

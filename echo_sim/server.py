@@ -20,12 +20,15 @@ class GameRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # Отключить стандартный лог
 
+    def _cors_origin(self) -> str:
+        return getattr(self.server, "allowed_origin", "*")
+
     def _send_json(self, data: dict, status: int = 200) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
@@ -34,7 +37,7 @@ class GameRequestHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         """Preflight CORS для Godot/браузеров."""
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
@@ -89,7 +92,7 @@ class GameRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Transfer-Encoding", "chunked")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
 
@@ -152,23 +155,29 @@ class GameRequestHandler(BaseHTTPRequestHandler):
 
 
 class _GameHTTPServer(HTTPServer):
-    def __init__(self, server_address, handler, engine: Engine):
+    def __init__(self, server_address, handler, engine: Engine, allowed_origin: str = "*"):
         super().__init__(server_address, handler)
         self.engine = engine
+        self.allowed_origin = allowed_origin
 
 
 class GameServer:
-    def __init__(self, engine: Engine, port: int = 8080) -> None:
+    def __init__(self, engine: Engine, port: int = 8080, host: str = "127.0.0.1",
+                 allowed_origin: str = "*") -> None:
         self.engine = engine
         self.port = port
+        self.host = host
+        self.allowed_origin = allowed_origin
         self._server: _GameHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        self._server = _GameHTTPServer(("", self.port), GameRequestHandler, self.engine)
+        self._server = _GameHTTPServer(
+            (self.host, self.port), GameRequestHandler, self.engine, self.allowed_origin
+        )
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
-        print(f"Echo-Sim сервер запущен на http://localhost:{self.port}")
+        print(f"Echo-Sim сервер запущен на http://{self.host}:{self.port}")
 
     def stop(self) -> None:
         if self._server:
@@ -180,13 +189,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Echo-Sim HTTP Server")
     parser.add_argument("--config", default="echo_sim/config/world.json")
     parser.add_argument("--port", type=int, default=None)
+    parser.add_argument(
+        "--host", default=None,
+        help="Адрес привязки (по умолчанию 127.0.0.1; используйте 0.0.0.0 только осознанно)",
+    )
     args = parser.parse_args()
 
     from echo_sim.core.engine import Engine
     engine = Engine(config_path=args.config)
     port = args.port or engine.config.get("server_port", 8080)
+    host = args.host or engine.config.get("server_host", "127.0.0.1")
+    allowed_origin = engine.config.get("cors_allowed_origins", "*")
 
-    server = GameServer(engine, port=port)
+    server = GameServer(engine, port=port, host=host, allowed_origin=allowed_origin)
     server.start()
     print(f"Мир: {engine.world.epoch} | Персонаж: {engine.player.name}")
     print("Нажмите Ctrl+C для остановки.")
