@@ -61,7 +61,7 @@
 {
   "llm_provider": "kluster",
   "llm_model": "ваша-модель",
-  "api_key": "9ba7398f-80ba-40a2-9dd4-da304de49be5"
+  "api_key": "ваш-kluster-api-ключ"
 }
 ```
 
@@ -76,6 +76,20 @@
   "api_url": "http://localhost:8080/v1/chat/completions"
 }
 ```
+
+## Безопасное хранение API-ключа
+
+**Не храните API-ключи в `world.json`** — этот файл попадает в систему контроля версий.
+Вместо этого задайте ключ через переменную окружения `ECHOSIM_API_KEY`, она имеет
+приоритет над значением из `world.json`:
+
+```bash
+export ECHOSIM_API_KEY="ваш-ключ"      # Linux / macOS
+setx ECHOSIM_API_KEY "ваш-ключ"        # Windows (PowerShell/cmd)
+```
+
+Для Telegram-бота используйте `TELEGRAM_BOT_TOKEN` (токен) и `ECHOSIM_API_KEY` (ключ LLM).
+Пример см. в `.env.example`.
 
 ## Настройка в world.json
 

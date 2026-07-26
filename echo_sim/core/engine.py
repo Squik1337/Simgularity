@@ -1,5 +1,7 @@
 """Игровой цикл — центральный координатор Echo-Sim."""
 from __future__ import annotations
+import json
+import os
 import random
 from typing import Literal
 
@@ -13,6 +15,27 @@ from echo_sim.core.dice import ActionResolver
 
 BUILTIN_COMMANDS = {"look", "inventory", "status", "go", "talk", "restart", "quit"}
 TICK_MINUTES = 60
+
+# Каталог для файлов сохранений. Сохранение/загрузка ограничены этим каталогом,
+# чтобы команды save/load (в т.ч. приходящие по HTTP) не могли читать/писать
+# произвольные файлы на диске (path traversal).
+SAVE_DIR = os.environ.get("ECHOSIM_SAVE_DIR", "saves")
+
+
+def resolve_save_path(path: str) -> str:
+    """Привести пользовательский путь сохранения к безопасному файлу внутри SAVE_DIR.
+
+    Отбрасываются любые компоненты каталогов и `..`, гарантируется расширение .json.
+    """
+    name = os.path.basename((path or "").strip()) or "savegame.json"
+    if not name.endswith(".json"):
+        name += ".json"
+    base = os.path.abspath(SAVE_DIR)
+    full = os.path.abspath(os.path.join(base, name))
+    # Финальная проверка, что путь не вышел за пределы каталога сохранений.
+    if os.path.commonpath([base, full]) != base:
+        raise ValueError("Недопустимый путь сохранения")
+    return full
 
 # Русские алиасы команд → английский глагол
 RU_COMMANDS: dict[str, str] = {
@@ -853,20 +876,24 @@ class Engine:
         }
 
     def save_game(self, path: str = "savegame.json") -> None:
-        """Сохранить текущее состояние игры в JSON-файл."""
-        import json
+        """Сохранить текущее состояние игры в JSON-файл внутри каталога сохранений."""
+        safe_path = resolve_save_path(path)
+        os.makedirs(os.path.dirname(safe_path), exist_ok=True)
         state = self.get_full_state()
         state["session_context"] = self.gm.session_context
-        with open(path, "w", encoding="utf-8") as f:
+        with open(safe_path, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
 
     def load_game(self, path: str = "savegame.json") -> bool:
         """Загрузить состояние из JSON-файла. Возвращает True при успехе."""
-        import json, os
-        if not os.path.exists(path):
+        try:
+            safe_path = resolve_save_path(path)
+        except ValueError:
+            return False
+        if not os.path.exists(safe_path):
             return False
         try:
-            with open(path, encoding="utf-8") as f:
+            with open(safe_path, encoding="utf-8") as f:
                 state = json.load(f)
         except Exception:
             return False
