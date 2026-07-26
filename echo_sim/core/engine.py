@@ -181,7 +181,7 @@ class Engine:
         # Записываем в журнал
         if response.narrative:
             self.player.add_journal_entry(
-                f"Пришёл в {self.world.locations.get(location_id, type('', (), {'name': location_id})()).name}: {response.narrative[:100]}",
+                f"Пришёл в {self.world.location_name(location_id)}: {response.narrative[:100]}",
                 location_id, self.world.game_time
             )
         return response.narrative
@@ -320,8 +320,7 @@ class Engine:
 
         # Бросок через DiceSystem
         loc_id = self.world.current_location_id
-        witnesses = [n for n in self.npcs.values()
-                     if n.status == "alive" and n.location_id == loc_id and n.id != npc.id]
+        witnesses = self._alive_npcs_at(loc_id, exclude_id=npc.id)
         roll, dice_prompt = self._action_resolver.resolve(
             f"атакую {npc.name}", self.player, [npc], witnesses
         )
@@ -393,8 +392,7 @@ class Engine:
             return "Дневник пуст — ты ещё ничего не записал."
         lines = ["Дневник:"]
         for entry in self.player.journal[-15:]:
-            loc = self.world.locations.get(entry.location_id)
-            loc_name = loc.name if loc else entry.location_id
+            loc_name = self.world.location_name(entry.location_id)
             mark = "★ " if entry.important else "  "
             lines.append(f"{mark}[{loc_name}] {entry.text[:100]}")
         return "\n".join(lines)
@@ -404,13 +402,12 @@ class Engine:
         visited = list({n.location_id for n in self.player.map_notes if n.visited})
         lines = []
         if visited:
-            names = [self.world.locations.get(lid, type('', (), {'name': lid})()).name for lid in visited]
+            names = [self.world.location_name(lid) for lid in visited]
             lines.append("Посещённые места: " + ", ".join(names))
         if notes:
             lines.append("\nЗапомнившиеся места:")
             for note in notes[-15:]:
-                loc = self.world.locations.get(note.location_id)
-                loc_name = loc.name if loc else note.location_id
+                loc_name = self.world.location_name(note.location_id)
                 lines.append(f"  [{loc_name}] {note.label}")
         acq = self.player.get_acquaintance_summary()
         if acq:
@@ -429,7 +426,7 @@ class Engine:
 
         # Собираем цели и свидетелей
         loc_id = self.world.current_location_id
-        all_loc_npcs = [n for n in self.npcs.values() if n.status == "alive" and n.location_id == loc_id]
+        all_loc_npcs = self._alive_npcs_at(loc_id)
         npc_targets = [npc_target] if npc_target else []
         witnesses = [n for n in all_loc_npcs if n not in npc_targets]
 
@@ -508,13 +505,29 @@ class Engine:
         cmd_lower = command.lower()
         return any(w in cmd_lower for w in self._ATTACK_WORDS)
 
+    def _alive_npcs_at(self, location_id: str, exclude_id: str | None = None) -> list["NPC"]:
+        """Живые NPC в локации, опционально исключая одного по id."""
+        return [
+            npc for npc in self.npcs.values()
+            if npc.status == "alive"
+            and npc.location_id == location_id
+            and npc.id != exclude_id
+        ]
+
+    def _queue_rumor(self, description: str, location_id: str,
+                     tick_delay: int = 1, weight: int = 1) -> None:
+        """Поставить слух в очередь на распространение."""
+        self._pending_rumors.append({
+            "description": description,
+            "location_id": location_id,
+            "tick_delay": tick_delay,
+            "weight": weight,
+        })
+
     def _record_witnesses(self, command: str, narrative: str, events: list) -> None:
         """Все NPC в текущей локации становятся свидетелями действия игрока."""
         loc_id = self.world.current_location_id
-        witnesses = [
-            npc for npc in self.npcs.values()
-            if npc.status == "alive" and npc.location_id == loc_id
-        ]
+        witnesses = self._alive_npcs_at(loc_id)
         if not witnesses:
             return
 
@@ -544,30 +557,16 @@ class Engine:
 
         # Если вес >= 2 — событие расходится слухами в соседние локации
         if weight >= 2:
-            rumor = f"Говорят, {self.player.name} {short_cmd[:60]} в {self.world.locations.get(loc_id, type('', (), {'name': loc_id})()).name}"
-            self._pending_rumors.append({
-                "description": rumor,
-                "location_id": loc_id,
-                "tick_delay": 1,
-                "weight": weight,
-            })
+            rumor = f"Говорят, {self.player.name} {short_cmd[:60]} в {self.world.location_name(loc_id)}"
+            self._queue_rumor(rumor, loc_id, weight=weight)
 
     def broadcast_event(self, description: str, loc_id: str, weight: int = 1) -> None:
         """Распространить значимое событие — свидетели запоминают, слухи расходятся."""
-        witnesses = [
-            npc for npc in self.npcs.values()
-            if npc.status == "alive" and npc.location_id == loc_id
-        ]
-        for npc in witnesses:
+        for npc in self._alive_npcs_at(loc_id):
             npc.witnessed_player_action(description, weight=weight)
 
         if weight >= 2:
-            self._pending_rumors.append({
-                "description": description,
-                "location_id": loc_id,
-                "tick_delay": 1,
-                "weight": weight,
-            })
+            self._queue_rumor(description, loc_id, weight=weight)
 
     def _build_world_ctx(self) -> dict:
         scene = self.world.get_scene_context(self.npcs)
@@ -625,11 +624,7 @@ class Engine:
                 loc_id = p.get("location_id", self.world.current_location_id)
                 if desc:
                     self.world.new_event(desc, loc_id)
-                    self._pending_rumors.append({
-                        "description": desc,
-                        "location_id": loc_id,
-                        "tick_delay": 1,
-                    })
+                    self._queue_rumor(desc, loc_id)
 
             elif event.type == "map_note":
                 # GM заметил что-то запоминающееся — добавляем на ментальную карту
@@ -651,9 +646,8 @@ class Engine:
                     self.broadcast_event(death_desc, dead_npc.location_id, weight=3)
                     # Автоматически снижаем репутацию у всех свидетелей
                     loc_id = dead_npc.location_id
-                    for witness in self.npcs.values():
-                        if witness.status == "alive" and witness.location_id == loc_id:
-                            self.player.apply_reputation_change(witness.id, -15)
+                    for witness in self._alive_npcs_at(loc_id):
+                        self.player.apply_reputation_change(witness.id, -15)
 
             elif event.type == "inventory_change":
                 for item in p.get("add", []):
@@ -715,12 +709,8 @@ class Engine:
                 # Критические слухи (убийство) расходятся ещё на один уровень через тик
                 if weight >= 3:
                     for adj_npc in adjacent_npcs:
-                        self._pending_rumors.append({
-                            "description": rumor["description"],
-                            "location_id": adj_npc.location_id,
-                            "tick_delay": 2,
-                            "weight": 1,  # дальше идёт как обычный слух
-                        })
+                        # дальше идёт как обычный слух
+                        self._queue_rumor(rumor["description"], adj_npc.location_id, tick_delay=2)
             else:
                 rumor["tick_delay"] -= 1
                 remaining.append(rumor)
@@ -836,11 +826,7 @@ class Engine:
                     self.world.new_event(response.narrative[:200], loc_id, event_type="npc_action")
                     a.add_memory(response.narrative[:100])
                     b.add_memory(response.narrative[:100])
-                    self._pending_rumors.append({
-                        "description": response.narrative[:80],
-                        "location_id": loc_id,
-                        "tick_delay": 1,
-                    })
+                    self._queue_rumor(response.narrative[:80], loc_id)
             except Exception:
                 pass
 

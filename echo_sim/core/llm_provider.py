@@ -10,15 +10,62 @@ from typing import Callable, Optional
 
 class LLMProvider(ABC):
     """Базовый класс для LLM провайдеров."""
-    
-    def __init__(self, model: str, stream_callback: Optional[Callable[[str], None]] = None):
+
+    def __init__(self, model: str, timeout: int = 120,
+                 stream_callback: Optional[Callable[[str], None]] = None):
         self.model = model
+        self.timeout = timeout
         self.stream_callback = stream_callback
-    
+
     @abstractmethod
     def generate(self, system_prompt: str, messages: list[dict]) -> str:
         """Генерировать ответ от LLM."""
         pass
+
+    # ── Общие утилиты для HTTP-стриминга ──────────────────
+
+    @staticmethod
+    def _build_request(url: str, payload: dict,
+                       extra_headers: Optional[dict] = None) -> urllib.request.Request:
+        """Собрать POST-запрос с JSON-телом."""
+        headers = {"Content-Type": "application/json"}
+        if extra_headers:
+            headers.update(extra_headers)
+        data = json.dumps(payload).encode("utf-8")
+        return urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+    def _emit(self, token: str) -> None:
+        """Отдать токен в callback или напечатать в stdout."""
+        if self.stream_callback:
+            self.stream_callback(token)
+        else:
+            print(token, end="", flush=True)
+
+    def _finalize(self) -> None:
+        """Завершить вывод переводом строки при печати в stdout."""
+        if not self.stream_callback:
+            print()
+
+    def _stream(self, req: urllib.request.Request,
+                parse_chunk: Callable[[bytes], tuple[str, bool]]) -> str:
+        """Отправить запрос и построчно стримить ответ.
+
+        parse_chunk(line) -> (token, done): извлекает токен из строки ответа и
+        сигнализирует о завершении потока.
+        """
+        result: list[str] = []
+        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            for line in resp:
+                if not line.strip():
+                    continue
+                token, done = parse_chunk(line)
+                if token:
+                    result.append(token)
+                    self._emit(token)
+                if done:
+                    break
+        self._finalize()
+        return "".join(result)
 
 
 class OllamaProvider(LLMProvider):
@@ -26,51 +73,31 @@ class OllamaProvider(LLMProvider):
     
     def __init__(self, model: str, url: str = "http://localhost:11434/api/generate", 
                  timeout: int = 120, stream_callback: Optional[Callable[[str], None]] = None):
-        super().__init__(model, stream_callback)
+        super().__init__(model, timeout, stream_callback)
         self.url = url
-        self.timeout = timeout
-    
+
+    @staticmethod
+    def _parse_chunk(line: bytes) -> tuple[str, bool]:
+        try:
+            chunk = json.loads(line.decode("utf-8"))
+        except json.JSONDecodeError:
+            return "", False
+        return chunk.get("response", ""), bool(chunk.get("done"))
+
     def generate(self, system_prompt: str, messages: list[dict]) -> str:
         full_prompt = system_prompt + "\n\n"
         for msg in messages:
             role = "Igrok" if msg["role"] == "user" else "GM"
             full_prompt += f"{role}: {msg['content']}\n"
-        
-        payload = json.dumps({
+
+        req = self._build_request(self.url, {
             "model": self.model,
             "prompt": full_prompt,
             "stream": True,
-        }).encode("utf-8")
-        
-        req = urllib.request.Request(
-            self.url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        
+        })
+
         try:
-            result = []
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                for line in resp:
-                    if not line.strip():
-                        continue
-                    try:
-                        chunk = json.loads(line.decode("utf-8"))
-                        token = chunk.get("response", "")
-                        if token:
-                            result.append(token)
-                            if self.stream_callback:
-                                self.stream_callback(token)
-                            else:
-                                print(token, end="", flush=True)
-                        if chunk.get("done"):
-                            break
-                    except json.JSONDecodeError:
-                        continue
-            if not self.stream_callback:
-                print()
-            return "".join(result)
+            return self._stream(req, self._parse_chunk)
         except urllib.error.URLError:
             return "GM nedostupen: ollama ne zapushchen"
         except TimeoutError:
@@ -85,62 +112,46 @@ class OpenAICompatibleProvider(LLMProvider):
     def __init__(self, model: str, api_key: str, api_url: str = "https://api.openai.com/v1/chat/completions",
                  timeout: int = 120, temperature: float = 0.7, max_tokens: int = 2048,
                  stream_callback: Optional[Callable[[str], None]] = None):
-        super().__init__(model, stream_callback)
+        super().__init__(model, timeout, stream_callback)
         self.api_key = api_key
         self.api_url = api_url
-        self.timeout = timeout
         self.temperature = temperature
         self.max_tokens = max_tokens
-    
+
+    @staticmethod
+    def _parse_chunk(line: bytes) -> tuple[str, bool]:
+        line_str = line.decode("utf-8")
+        if not line_str.startswith("data: "):
+            return "", False
+        data_str = line_str[6:]
+        if data_str.strip() == "[DONE]":
+            return "", True
+        try:
+            chunk = json.loads(data_str)
+        except json.JSONDecodeError:
+            return "", False
+        delta = chunk.get("choices", [{}])[0].get("delta", {})
+        return delta.get("content", ""), False
+
     def generate(self, system_prompt: str, messages: list[dict]) -> str:
         # Формируем сообщения в формате OpenAI
         openai_messages = [{"role": "system", "content": system_prompt}]
         openai_messages.extend(messages)
-        
-        payload = json.dumps({
-            "model": self.model,
-            "messages": openai_messages,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "stream": True,
-        }).encode("utf-8")
-        
-        req = urllib.request.Request(
+
+        req = self._build_request(
             self.api_url,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
+            {
+                "model": self.model,
+                "messages": openai_messages,
+                "temperature": self.temperature,
+                "max_tokens": self.max_tokens,
+                "stream": True,
             },
-            method="POST",
+            extra_headers={"Authorization": f"Bearer {self.api_key}"},
         )
-        
+
         try:
-            result = []
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                for line in resp:
-                    if not line.strip():
-                        continue
-                    line_str = line.decode("utf-8")
-                    if line_str.startswith("data: "):
-                        data_str = line_str[6:]
-                        if data_str.strip() == "[DONE]":
-                            break
-                        try:
-                            chunk = json.loads(data_str)
-                            delta = chunk.get("choices", [{}])[0].get("delta", {})
-                            token = delta.get("content", "")
-                            if token:
-                                result.append(token)
-                                if self.stream_callback:
-                                    self.stream_callback(token)
-                                else:
-                                    print(token, end="", flush=True)
-                        except json.JSONDecodeError:
-                            continue
-            if not self.stream_callback:
-                print()
-            return "".join(result)
+            return self._stream(req, self._parse_chunk)
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8") if e.fp else ""
             return f"GM nedostupen: HTTP {e.code} - {error_body}"
