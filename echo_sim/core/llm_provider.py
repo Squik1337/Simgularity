@@ -2,10 +2,15 @@
 """Абстракция для различных LLM провайдеров."""
 from __future__ import annotations
 import json
+import logging
 import urllib.request
 import urllib.error
 from abc import ABC, abstractmethod
 from typing import Callable, Optional
+
+from echo_sim.core.errors import LLMTimeoutError, LLMUnavailableError
+
+logger = logging.getLogger(__name__)
 
 
 class LLMProvider(ABC):
@@ -17,8 +22,11 @@ class LLMProvider(ABC):
     
     @abstractmethod
     def generate(self, system_prompt: str, messages: list[dict]) -> str:
-        """Генерировать ответ от LLM."""
-        pass
+        """Генерировать ответ от LLM.
+
+        Raises:
+            LLMError: если провайдер недоступен или вернул ошибку.
+        """
 
 
 class OllamaProvider(LLMProvider):
@@ -67,16 +75,21 @@ class OllamaProvider(LLMProvider):
                         if chunk.get("done"):
                             break
                     except json.JSONDecodeError:
+                        logger.debug("Пропущен невалидный JSON-чанк от Ollama: %r", line)
                         continue
             if not self.stream_callback:
                 print()
             return "".join(result)
-        except urllib.error.URLError:
-            return "GM nedostupen: ollama ne zapushchen"
-        except TimeoutError:
-            return "GM nedostupen: prevysheno vremya ozhidaniya"
-        except Exception as e:
-            return f"GM nedostupen: {e}"
+        except TimeoutError as e:
+            raise LLMTimeoutError(
+                f"Ollama не ответил за {self.timeout} с ({self.url})"
+            ) from e
+        except urllib.error.URLError as e:
+            raise LLMUnavailableError(
+                f"Ollama недоступен по адресу {self.url}: {e.reason}"
+            ) from e
+        except OSError as e:
+            raise LLMUnavailableError(f"Ошибка соединения с Ollama: {e}") from e
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -137,19 +150,29 @@ class OpenAICompatibleProvider(LLMProvider):
                                 else:
                                     print(token, end="", flush=True)
                         except json.JSONDecodeError:
+                            logger.debug("Пропущен невалидный SSE-чанк: %r", data_str)
                             continue
             if not self.stream_callback:
                 print()
             return "".join(result)
+        except TimeoutError as e:
+            raise LLMTimeoutError(
+                f"{self.api_url} не ответил за {self.timeout} с"
+            ) from e
         except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8") if e.fp else ""
-            return f"GM nedostupen: HTTP {e.code} - {error_body}"
+            error_body = ""
+            if e.fp is not None:
+                try:
+                    error_body = e.read().decode("utf-8", errors="replace")
+                except OSError:
+                    logger.debug("Не удалось прочитать тело HTTP-ошибки", exc_info=True)
+            raise LLMUnavailableError(
+                f"HTTP {e.code} от {self.api_url}: {error_body or e.reason}"
+            ) from e
         except urllib.error.URLError as e:
-            return f"GM nedostupen: {e.reason}"
-        except TimeoutError:
-            return "GM nedostupen: prevysheno vremya ozhidaniya"
-        except Exception as e:
-            return f"GM nedostupen: {e}"
+            raise LLMUnavailableError(f"{self.api_url} недоступен: {e.reason}") from e
+        except OSError as e:
+            raise LLMUnavailableError(f"Ошибка соединения с {self.api_url}: {e}") from e
 
 
 def create_llm_provider(config: dict, stream_callback: Optional[Callable[[str], None]] = None) -> LLMProvider:

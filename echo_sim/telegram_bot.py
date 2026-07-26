@@ -3,6 +3,7 @@ import json
 import logging
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 # --- КОНФИГУРАЦИЯ ---
@@ -21,16 +22,19 @@ logger = logging.getLogger(__name__)
 
 # --- ЗАГРУЗКА МИРА ---
 def load_world():
+    """Загрузить world.json.
+
+    Raises:
+        RuntimeError: если файл отсутствует, нечитаем или невалиден.
+    """
     try:
         with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception as e:
-        logger.error(f"Ошибка загрузки мира: {e}")
-        return None
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        logger.error("Ошибка загрузки мира из %s", CONFIG_PATH, exc_info=True)
+        raise RuntimeError(f"Не удалось загрузить {CONFIG_PATH}: {e}") from e
 
 world_data = load_world()
-if not world_data:
-    raise Exception("Не удалось загрузить world.json. Проверьте путь и формат файла.")
 
 # Хранилище состояний игроков: {user_id: {...}}
 players = {}
@@ -112,18 +116,21 @@ def ask_llm(prompt, system_context=""):
 
     try:
         response = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=15)
-        
-        # ВАЖНО: Печатаем полный ответ ошибки в консоль для отладки
-        if response.status_code != 200:
-            logger.error(f"Groq API Error {response.status_code}")
-            logger.error(f"RESPONSE BODY: {response.text}") # <-- Вот здесь будет точная причина!
-            return f"(Ошибка магии: {response.status_code}. См. консоль.)"
-            
-        result = response.json()
-        return result['choices'][0]['message']['content']
-    except Exception as e:
-        logger.error(f"LLM Connection Error: {e}")
-        return f"(Магия дала сбой... Ошибка соединения: {str(e)})"
+    except requests.RequestException as e:
+        logger.error("LLM Connection Error: %s", e, exc_info=True)
+        return f"(Магия дала сбой... Ошибка соединения: {e})"
+
+    if response.status_code != 200:
+        logger.error(
+            "Groq API Error %s, body: %s", response.status_code, response.text
+        )
+        return f"(Ошибка магии: {response.status_code}. См. логи.)"
+
+    try:
+        return response.json()['choices'][0]['message']['content']
+    except (ValueError, KeyError, IndexError, TypeError) as e:
+        logger.error("Неожиданный формат ответа LLM: %s", response.text, exc_info=True)
+        return f"(Магия дала сбой... Непонятный ответ от LLM: {type(e).__name__})"
 
 # --- ГЕНЕРАЦИЯ КЛАВИАТУРЫ ---
 def build_keyboard(player, mode='main'):
@@ -353,11 +360,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Если ответ содержит Markdown, пытаемся его отрендерить, иначе просто текст
     try:
         await update.message.reply_text(response, parse_mode='Markdown')
-    except:
+    except BadRequest as e:
+        logger.info("Markdown не отрендерился (%s), отправляем простым текстом", e)
         await update.message.reply_text(response)
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.warning(f'Update {update} caused error {context.error}')
+    logger.error(
+        "Update %s caused error", update, exc_info=context.error
+    )
 
 # --- ЗАПУСК ---
 def main():

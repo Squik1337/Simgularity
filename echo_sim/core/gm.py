@@ -2,12 +2,16 @@
 """Game Master -- interaction with LLM providers."""
 from __future__ import annotations
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from echo_sim.core.errors import LLMError
 from echo_sim.core.gm_prompt import build_main_prompt, build_ambient_prompt
 from echo_sim.core.llm_provider import create_llm_provider, LLMProvider
+
+logger = logging.getLogger(__name__)
 
 TIMEOUT_SECONDS = 120
 
@@ -37,7 +41,11 @@ class GameMaster:
     def generate(self, world_ctx: dict, command: str) -> GMResponse:
         system_prompt = self._build_system_prompt(world_ctx)
         messages = self._build_messages(command)
-        raw = self.llm_provider.generate(system_prompt, messages)
+        try:
+            raw = self.llm_provider.generate(system_prompt, messages)
+        except LLMError as e:
+            logger.error("LLM не ответил на команду %r: %s", command, e, exc_info=True)
+            return GMResponse(narrative=f"[GM недоступен: {e}]")
         response = self._parse_response(raw)
         self.session_context.append({"role": "user", "content": command})
         self.session_context.append({"role": "assistant", "content": response.narrative})
@@ -105,7 +113,7 @@ class GameMaster:
                 if "narrative" in candidate:
                     candidates.append(candidate)
             except json.JSONDecodeError:
-                pass
+                continue
 
         if candidates:
             # Берём последний — модели иногда исправляют себя
@@ -149,5 +157,7 @@ class GameMaster:
         intensity = getattr(trigger, "intensity", "subtle")
 
         prompt = build_ambient_prompt(self.epoch, loc, time_str, npc_names, recent_str, kind, intensity)
+        # LLMError намеренно пробрасывается — фоновое событие можно молча пропустить,
+        # решение принимает вызывающий код.
         raw = self.llm_provider.generate(prompt, [])
         return self._parse_response(raw)

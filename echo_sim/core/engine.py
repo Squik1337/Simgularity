@@ -1,8 +1,12 @@
 """Игровой цикл — центральный координатор Echo-Sim."""
 from __future__ import annotations
+import json
+import logging
+import os
 import random
 from typing import Literal
 
+from echo_sim.core.errors import LLMError, SaveGameError
 from echo_sim.core.config import load_config
 from echo_sim.core.world import World
 from echo_sim.core.player import Player, Quest
@@ -10,6 +14,8 @@ from echo_sim.core.npc import NPC
 from echo_sim.core.gm import GameMaster, GameEvent
 from echo_sim.core.ambient import roll_ambient
 from echo_sim.core.dice import ActionResolver
+
+logger = logging.getLogger(__name__)
 
 BUILTIN_COMMANDS = {"look", "inventory", "status", "go", "talk", "restart", "quit"}
 TICK_MINUTES = 60
@@ -110,11 +116,18 @@ class Engine:
             return self._cmd_attack(arg or command)
         elif verb == "save":
             path = arg or "savegame.json"
-            self.save_game(path)
+            try:
+                self.save_game(path)
+            except SaveGameError as e:
+                return f"Не удалось сохранить игру: {e}"
             return f"Игра сохранена."
         elif verb == "load":
             path = arg or "savegame.json"
-            if self.load_game(path):
+            try:
+                loaded = self.load_game(path)
+            except SaveGameError as e:
+                return f"Не удалось загрузить игру: {e}"
+            if loaded:
                 return "Игра загружена.\n" + self._cmd_look()
             return "Файл сохранения не найден."
         elif verb == "help":
@@ -220,6 +233,7 @@ class Engine:
                 try:
                     return int(item.split("(")[1].rstrip(")"))
                 except (IndexError, ValueError):
+                    logger.warning("Не удалось разобрать количество монет в предмете %r", item)
                     return 0
         return 0
 
@@ -741,7 +755,8 @@ class Engine:
 
         try:
             response = self.gm.generate_ambient(world_ctx, trigger)
-        except Exception:
+        except LLMError as e:
+            logger.warning("Фоновое событие пропущено — LLM недоступен: %s", e)
             return
 
         if not response.narrative or len(response.narrative) < 5:
@@ -841,8 +856,11 @@ class Engine:
                         "location_id": loc_id,
                         "tick_delay": 1,
                     })
-            except Exception:
-                pass
+            except LLMError as e:
+                logger.warning(
+                    "Автономное взаимодействие NPC в локации %s пропущено — LLM недоступен: %s",
+                    loc_id, e,
+                )
 
     def get_full_state(self) -> dict:
         return {
@@ -853,23 +871,38 @@ class Engine:
         }
 
     def save_game(self, path: str = "savegame.json") -> None:
-        """Сохранить текущее состояние игры в JSON-файл."""
-        import json
+        """Сохранить текущее состояние игры в JSON-файл.
+
+        Raises:
+            SaveGameError: если файл не удалось записать.
+        """
         state = self.get_full_state()
         state["session_context"] = self.gm.session_context
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            logger.error("Не удалось записать сохранение %s", path, exc_info=True)
+            raise SaveGameError(f"не удалось записать {path}: {e}") from e
 
     def load_game(self, path: str = "savegame.json") -> bool:
-        """Загрузить состояние из JSON-файла. Возвращает True при успехе."""
-        import json, os
+        """Загрузить состояние из JSON-файла.
+
+        Возвращает False, если файла нет.
+
+        Raises:
+            SaveGameError: если файл есть, но повреждён или нечитаем.
+        """
         if not os.path.exists(path):
             return False
         try:
             with open(path, encoding="utf-8") as f:
                 state = json.load(f)
-        except Exception:
-            return False
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.error("Не удалось прочитать сохранение %s", path, exc_info=True)
+            raise SaveGameError(f"файл сохранения {path} повреждён: {e}") from e
+        if not isinstance(state, dict):
+            raise SaveGameError(f"файл сохранения {path} имеет неверный формат")
 
         # Восстановить мир
         w = state.get("world", {})
