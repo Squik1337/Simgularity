@@ -1,5 +1,6 @@
 """Точка входа Echo-Sim — CLI REPL и TUI."""
 import argparse
+import logging
 import sys
 import os
 
@@ -7,6 +8,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from echo_sim.core.engine import Engine
+
+logger = logging.getLogger(__name__)
 
 
 def run_cli(engine: Engine) -> None:
@@ -23,22 +26,28 @@ def run_cli(engine: Engine) -> None:
             continue
         try:
             response = engine.process_command(command)
-            print(response)
-            print()
         except SystemExit:
             print("До свидания!")
             break
+        except Exception as e:
+            logger.exception("Ошибка при выполнении команды %r", command)
+            print(f"Ошибка: {type(e).__name__}: {e}")
+            print()
+            continue
+        print(response)
+        print()
 
 
 def run_tui(engine: Engine) -> None:
     """Запустить TUI на базе Textual."""
     try:
         from echo_sim.tui import EchoSimApp
-        app = EchoSimApp(engine)
-        app.run()
-    except ImportError:
-        print("Ошибка: библиотека 'textual' не установлена. Запустите: pip install textual")
+    except ImportError as e:
+        logger.debug("Импорт TUI не удался", exc_info=True)
+        print(f"Ошибка: не удалось загрузить TUI ({e}). Запустите: pip install textual")
         sys.exit(1)
+    app = EchoSimApp(engine)
+    app.run()
 
 
 def main() -> None:
@@ -54,7 +63,17 @@ def main() -> None:
         default="cli",
         help="Режим интерфейса: cli (по умолчанию) или tui",
     )
+    parser.add_argument(
+        "--log-level",
+        default=os.environ.get("ECHO_SIM_LOG_LEVEL", "WARNING"),
+        help="Уровень логирования: DEBUG, INFO, WARNING, ERROR",
+    )
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=args.log_level.upper(),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
 
     engine = Engine(config_path=args.config)
 

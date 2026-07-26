@@ -1,7 +1,10 @@
 """TUI для Echo-Sim на базе Textual — 3 панели: нарратив, статус, ввод."""
 from __future__ import annotations
 import asyncio
+import logging
 from typing import TYPE_CHECKING
+
+from echo_sim.core.errors import SaveGameError
 
 from textual.app import App, ComposeResult
 from textual.widgets import RichLog, Static, Input, Footer
@@ -10,6 +13,8 @@ from textual import work
 
 if TYPE_CHECKING:
     from echo_sim.core.engine import Engine
+
+logger = logging.getLogger(__name__)
 
 EPOCH_THEMES = {
     "post-apocalyptic": "post_apocalyptic",
@@ -195,6 +200,16 @@ class EchoSimApp(App):
             self.call_from_thread(self.append_narrative, "[bold red]До свидания![/bold red]")
             self.call_from_thread(self.exit)
             return
+        except Exception as e:
+            logger.exception("Ошибка при выполнении команды %r", command)
+            self.call_from_thread(
+                self.append_narrative,
+                f"[bold red]Ошибка:[/bold red] {type(e).__name__}: {e}",
+            )
+            self.call_from_thread(self._set_status_bar, "")
+            inp = self.query_one("#command-input", Input)
+            self.call_from_thread(setattr, inp, "disabled", False)
+            return
         finally:
             self.engine.gm.stream_callback = None
 
@@ -287,12 +302,24 @@ class EchoSimApp(App):
         )
 
     def action_save_game(self) -> None:
-        self.engine.save_game()
-        self._set_status_bar("[green]✓ Сохранено[/green]")
+        try:
+            self.engine.save_game()
+        except SaveGameError as e:
+            logger.error("Сохранение не удалось: %s", e)
+            self._set_status_bar(f"[red]✗ Не сохранено: {e}[/red]")
+        else:
+            self._set_status_bar("[green]✓ Сохранено[/green]")
         self.set_timer(2, lambda: self._set_status_bar(""))
 
     def action_load_game(self) -> None:
-        if self.engine.load_game():
+        try:
+            loaded = self.engine.load_game()
+        except SaveGameError as e:
+            logger.error("Загрузка не удалась: %s", e)
+            self._set_status_bar(f"[red]✗ Не загружено: {e}[/red]")
+            self.set_timer(2, lambda: self._set_status_bar(""))
+            return
+        if loaded:
             self._set_status_bar("[green]✓ Загружено[/green]")
             self._update_status()
             self._narrative_separator("ИГРА ЗАГРУЖЕНА", color="bold green")
