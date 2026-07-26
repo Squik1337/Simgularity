@@ -20,23 +20,32 @@ class GameRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # Отключить стандартный лог
 
+    def _send_cors_headers(self) -> None:
+        """CORS-заголовки для Godot/браузеров."""
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+    def _write_chunk(self, text: str) -> None:
+        """Записать один фрагмент в chunked transfer-encoding."""
+        encoded = text.encode("utf-8")
+        self.wfile.write(f"{len(encoded):x}\r\n".encode())
+        self.wfile.write(encoded)
+        self.wfile.write(b"\r\n")
+
     def _send_json(self, data: dict, status: int = 200) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
     def do_OPTIONS(self):
         """Preflight CORS для Godot/браузеров."""
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self._send_cors_headers()
         self.end_headers()
 
     def _read_json_body(self) -> tuple[dict | None, str | None]:
@@ -102,10 +111,7 @@ class GameRequestHandler(BaseHTTPRequestHandler):
                 chunk = "".join(token_buf)
                 token_buf.clear()
                 try:
-                    encoded = chunk.encode("utf-8")
-                    self.wfile.write(f"{len(encoded):x}\r\n".encode())
-                    self.wfile.write(encoded)
-                    self.wfile.write(b"\r\n")
+                    self._write_chunk(chunk)
                     self.wfile.flush()
                 except Exception:
                     pass
@@ -120,22 +126,15 @@ class GameRequestHandler(BaseHTTPRequestHandler):
 
         # Флашим остаток
         if token_buf:
-            chunk = "".join(token_buf)
-            encoded = chunk.encode("utf-8")
             try:
-                self.wfile.write(f"{len(encoded):x}\r\n".encode())
-                self.wfile.write(encoded)
-                self.wfile.write(b"\r\n")
+                self._write_chunk("".join(token_buf))
             except Exception:
                 pass
 
         # Финальный чанк — state в JSON после разделителя
         try:
             state_json = json.dumps({"__state__": engine.get_full_state()}, ensure_ascii=False)
-            encoded = state_json.encode("utf-8")
-            self.wfile.write(f"{len(encoded):x}\r\n".encode())
-            self.wfile.write(encoded)
-            self.wfile.write(b"\r\n")
+            self._write_chunk(state_json)
             # Завершающий chunked-терминатор
             self.wfile.write(b"0\r\n\r\n")
             self.wfile.flush()

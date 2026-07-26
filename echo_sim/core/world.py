@@ -70,6 +70,11 @@ class World:
         else:
             self.current_location_id = ""
 
+    def location_name(self, location_id: str) -> str:
+        """Название локации по id, либо сам id как запасной вариант."""
+        loc = self.locations.get(location_id)
+        return loc.name if loc else location_id
+
     def move_player(self, location_id: str) -> bool:
         """Переместить игрока. Возвращает True при успехе."""
         if location_id not in self.locations:
